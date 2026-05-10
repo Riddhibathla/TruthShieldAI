@@ -7,6 +7,8 @@ TruthShield AI is an AI-powered multimodal cybersecurity platform designed to de
 Built for hackathons and cybersecurity awareness, the platform combines OCR, machine learning, computer vision, and AI-based frame analysis into one unified detection system.
 
 ---
+# 🌐 Live Demo
+https://truthshieldai-one.vercel.app/
 
 # 🚀 Features
 
