@@ -1,137 +1,100 @@
-from urllib.parse import urlparse
-from Levenshtein import distance
 import re
 
 
-def detect_url_scam(url):
+def detect_text_scam(text):
+    original_text = text or ""
+    normalized = original_text.lower().strip()
 
-    suspicious_words = [
-        "free", "claim", "bonus", "wallet",
-        "airdrop", "login", "verify", "bank",
-        "crypto", "win", "urgent", "password"
-    ]
-
-    trusted_brands = [
-        "microsoft",
-        "google",
-        "amazon",
-        "paypal",
-        "facebook",
-        "apple"
-    ]
+    scam_patterns = {
+        "Urgency or pressure language": [
+            "urgent",
+            "immediately",
+            "act now",
+            "limited time",
+            "final warning",
+            "account suspended",
+            "will be blocked",
+            "expires today",
+        ],
+        "Credential or identity request": [
+            "password",
+            "otp",
+            "one time password",
+            "pin",
+            "verify your account",
+            "confirm your identity",
+            "login",
+            "sign in",
+            "kyc",
+        ],
+        "Financial or payment request": [
+            "bank",
+            "upi",
+            "paypal",
+            "wallet",
+            "crypto",
+            "bitcoin",
+            "gift card",
+            "transfer",
+            "refund",
+            "fee",
+        ],
+        "Reward or prize bait": [
+            "won",
+            "winner",
+            "prize",
+            "reward",
+            "bonus",
+            "cashback",
+            "free",
+            "claim",
+            "selected",
+            "congratulations",
+        ],
+    }
 
     score = 0
     reasons = []
 
-    original_url = url
-    url = url.lower().strip()
+    for category, terms in scam_patterns.items():
+        matched_terms = [term for term in terms if term in normalized]
+        if matched_terms:
+            score += min(35, 15 * len(matched_terms))
+            reasons.append(f"{category}: {', '.join(matched_terms[:4])}")
 
-    # Add protocol if missing
-    if not url.startswith(("http://", "https://")):
-        url = "http://" + url
-        score += 10
-        reasons.append("Missing HTTPS/HTTP protocol")
-
-    parsed = urlparse(url)
-    domain = parsed.netloc
-
-    # Remove www
-    domain = domain.replace("www.", "")
-
-    # Main domain name only
-    domain_name = domain.split(".")[0]
-
-    # 1. Suspicious keywords
-    for word in suspicious_words:
-        if word in url:
-            score += 12
-            reasons.append(f"Suspicious keyword detected: '{word}'")
-
-    # 2. Too many subdomains
-    if domain.count(".") > 3:
-        score += 15
-        reasons.append("Too many subdomains")
-
-    # 3. IP address instead of domain
-    if re.match(r"^\d+\.\d+\.\d+\.\d+$", domain):
-        score += 30
-        reasons.append("IP address used instead of domain")
-
-    # 4. @ symbol trick
-    if "@" in url:
+    if re.search(r"https?://|www\.|[a-z0-9-]+\.(com|net|org|in|co|io|info|xyz)\b", normalized):
         score += 25
-        reasons.append("@ symbol detected in URL")
+        reasons.append("Contains a link or domain")
 
-    # 5. Hyphenated domains
-    if "-" in domain:
-        score += 10
-        reasons.append("Hyphenated domain detected")
-
-    # 6. Long URL
-    if len(url) > 100:
-        score += 15
-        reasons.append("URL is unusually long")
-
-    # 7. HTTP instead of HTTPS
-    if not url.startswith("https://"):
+    if re.search(r"\b\d{4,}\b", normalized) and any(term in normalized for term in ["otp", "code", "pin", "password"]):
         score += 20
-        reasons.append("Website is not using HTTPS")
+        reasons.append("Requests or includes a sensitive numeric code")
 
-    # 8. Brand spoof detection using similarity
-    for trusted in trusted_brands:
+    if len(normalized) > 250 and any(term in normalized for term in ["click", "verify", "claim", "login"]):
+        score += 10
+        reasons.append("Long persuasive message with action request")
 
-        dist = distance(domain_name, trusted)
+    score = min(score, 100)
 
-        # Small spelling difference = suspicious
-        if dist <= 2 and domain_name != trusted:
-            score += 60
-            reasons.append(f"Possible spoofing of '{trusted}'")
-
-    # 9. Strange characters
-    if re.search(r"[%$^*(){}|<>]", url):
-        score += 15
-        reasons.append("Strange/suspicious characters detected")
-
-    # Final risk level
-    if score >= 70:
+    if not normalized:
+        level = "No Input"
+        reasons = ["Enter text to analyze"]
+        advice = "Paste a suspicious message before scanning."
+    elif score >= 70:
         level = "High Risk"
+        advice = "Do not click links, share codes, or send money. Verify through the official app or website."
     elif score >= 35:
         level = "Suspicious"
+        advice = "Treat this message carefully and verify it through an official channel."
     else:
-        level = "Low Risk"
+        level = "Likely Genuine"
+        reasons = reasons or ["No strong scam indicators detected"]
+        advice = "No major red flags were found, but stay cautious with unexpected requests."
 
     return {
-        "url": original_url,
-        "risk_score": min(score, 100),
+        "text": original_text,
+        "risk_score": score,
         "risk_level": level,
         "reasons": reasons,
-        "advice": "Avoid clicking suspicious or unknown links."
+        "advice": advice,
     }
-
-
-# TESTING
-
-test_urls = [
-    "rnicrosoft.com",
-    "micr0soft-login.net",
-    "g00gle-security.com",
-    "paypa1verify.org",
-    "https://google.com",
-    "http://192.168.1.1/login",
-    "free-airdrop-bonus.net",
-    "https://amazon.com"
-]
-
-for url in test_urls:
-    result = detect_url_scam(url)
-
-    print("\nURL:", result["url"])
-    print("Risk Score:", result["risk_score"])
-    print("Risk Level:", result["risk_level"])
-
-    print("Reasons:")
-    for reason in result["reasons"]:
-        print("-", reason)
-
-    print("Advice:", result["advice"])
-    print("-" * 60)
