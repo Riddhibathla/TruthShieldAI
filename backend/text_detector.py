@@ -1,68 +1,96 @@
+from urllib.parse import urlparse
+from Levenshtein import distance
 import re
 
-def detect_text_scam(text):
-    keywords = [
-        "urgent", "winner", "click now", "free", "limited offer",
-        "claim", "reward", "prize", "congratulations", "verify",
-        "password", "otp", "account blocked", "bank account",
-        "lottery", "gift card", "airdrop", "wallet", "login"
+
+def detect_url_scam(url):
+
+    suspicious_words = [
+        "free", "claim", "bonus", "wallet",
+        "airdrop", "login", "verify", "bank",
+        "crypto", "win", "urgent", "password"
     ]
 
-    urgency_words = [
-        "immediately", "today only", "last chance",
-        "act now", "within 24 hours", "expire", "expires"
+    trusted_brands = [
+        "microsoft",
+        "google",
+        "amazon",
+        "paypal",
+        "facebook",
+        "apple"
     ]
 
     score = 0
     reasons = []
 
-    original_text = text
-    text = text.lower().strip()
+    original_url = url
+    url = url.lower().strip()
 
-    # 1. Keyword detection
-    for word in keywords:
-        if word in text:
+    # Add protocol if missing
+    if not url.startswith(("http://", "https://")):
+        url = "http://" + url
+        score += 10
+        reasons.append("Missing HTTPS/HTTP protocol")
+
+    parsed = urlparse(url)
+    domain = parsed.netloc
+
+    # Remove www
+    domain = domain.replace("www.", "")
+
+    # Main domain name only
+    domain_name = domain.split(".")[0]
+
+    # 1. Suspicious keywords
+    for word in suspicious_words:
+        if word in url:
             score += 12
             reasons.append(f"Suspicious keyword detected: '{word}'")
 
-    # 2. Urgency detection
-    for word in urgency_words:
-        if word in text:
-            score += 15
-            reasons.append(f"Urgency/FOMO phrase detected: '{word}'")
-
-    # 3. Link detection
-    if re.search(r"http[s]?://|www\.", text):
-        score += 20
-        reasons.append("Message contains a link")
-
-    # 4. Phone number detection
-    if re.search(r"\b\d{10}\b", text):
-        score += 10
-        reasons.append("Phone number detected")
-
-    # 5. OTP or PIN request
-    if re.search(r"\b(otp|pin|cvv|password)\b", text):
-        score += 25
-        reasons.append("Sensitive information request detected")
-
-    # 6. Money/prize amount
-    if re.search(r"(₹|rs\.?|inr|\$)\s?\d+", text):
+    # 2. Too many subdomains
+    if domain.count(".") > 3:
         score += 15
-        reasons.append("Money amount detected")
+        reasons.append("Too many subdomains")
 
-    # 7. Excessive punctuation
-    if text.count("!") >= 3:
+    # 3. IP address instead of domain
+    if re.match(r"^\d+\.\d+\.\d+\.\d+$", domain):
+        score += 30
+        reasons.append("IP address used instead of domain")
+
+    # 4. @ symbol trick
+    if "@" in url:
+        score += 25
+        reasons.append("@ symbol detected in URL")
+
+    # 5. Hyphenated domains
+    if "-" in domain:
         score += 10
-        reasons.append("Excessive exclamation marks detected")
+        reasons.append("Hyphenated domain detected")
 
-    # 8. All caps detection
-    words = original_text.split()
-    caps_words = [w for w in words if w.isupper() and len(w) > 3]
+    # 6. Long URL
+    if len(url) > 100:
+        score += 15
+        reasons.append("URL is unusually long")
 
-    if len(caps_words) >= 2:
-        score += 10
-        reasons.append("Too many capitalized words detected")
+    # 7. HTTP instead of HTTPS
+    if not url.startswith("https://"):
+        score += 20
+        reasons.append("Website is not using HTTPS")
+
+    # 8. Brand spoof detection using similarity
+    for trusted in trusted_brands:
+
+        dist = distance(domain_name, trusted)
+
+        # Small spelling difference = suspicious
+        if dist <= 2 and domain_name != trusted:
+            score += 60
+            reasons.append(f"Possible spoofing of '{trusted}'")
+
+    # 9. Strange characters
+    if re.search(r"[%$^*(){}|<>]", url):
+        score += 15
+        reasons.append("Strange/suspicious characters detected")
 
     # Final risk level
     if score >= 70:
@@ -73,8 +101,37 @@ def detect_text_scam(text):
         level = "Low Risk"
 
     return {
+        "url": original_url,
         "risk_score": min(score, 100),
         "risk_level": level,
         "reasons": reasons,
-        "advice": "Do not trust unknown messages asking for money, OTP, password, or urgent action."
+        "advice": "Avoid clicking suspicious or unknown links."
     }
+
+
+# TESTING
+
+test_urls = [
+    "rnicrosoft.com",
+    "micr0soft-login.net",
+    "g00gle-security.com",
+    "paypa1verify.org",
+    "https://google.com",
+    "http://192.168.1.1/login",
+    "free-airdrop-bonus.net",
+    "https://amazon.com"
+]
+
+for url in test_urls:
+    result = detect_url_scam(url)
+
+    print("\nURL:", result["url"])
+    print("Risk Score:", result["risk_score"])
+    print("Risk Level:", result["risk_level"])
+
+    print("Reasons:")
+    for reason in result["reasons"]:
+        print("-", reason)
+
+    print("Advice:", result["advice"])
+    print("-" * 60)
