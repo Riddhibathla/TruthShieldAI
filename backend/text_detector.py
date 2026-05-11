@@ -20,6 +20,7 @@ def detect_text_scam(text):
             "password",
             "otp",
             "one time password",
+            "one-time password",
             "pin",
             "verify your account",
             "confirm your identity",

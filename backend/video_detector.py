@@ -1,170 +1,138 @@
-import cv2
 import os
+
+import cv2
+
 from ai_frame_detector import check_frame_with_ai
+
+
+def _cleanup(path):
+    if path and os.path.exists(path):
+        os.remove(path)
+
+
+def _cleanup_frame(path):
+    if path and os.path.exists(path):
+        os.remove(path)
+
 
 def analyze_video(path):
     cap = cv2.VideoCapture(path)
 
     frame_count = 0
     analyzed_frames = 0
-    ai_scores = []
+    fake_scores = []
+    real_scores = []
     suspicious_points = 0
+    ai_statuses = []
     reasons = []
 
     os.makedirs("sampled_frames", exist_ok=True)
 
-    while True:
-        ret, frame = cap.read()
+    try:
+        while True:
+            ret, frame = cap.read()
 
-        if not ret:
-            break
+            if not ret:
+                break
 
-        frame_count += 1
+            frame_count += 1
 
-        # Analyze every 30th frame
-        if frame_count % 30 == 0:
+            if frame_count % 30 != 0:
+                continue
 
             analyzed_frames += 1
 
-            # Resize for faster processing
             small = cv2.resize(frame, (320, 180))
-
             gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
 
-            # -------------------------------
-            # Blur / artifact detection
-            # -------------------------------
-            blur_score = cv2.Laplacian(
-                gray,
-                cv2.CV_64F
-            ).var()
+            blur_score = cv2.Laplacian(gray, cv2.CV_64F).var()
 
             if blur_score < 45:
                 suspicious_points += 12
+                reasons.append(f"Frame {analyzed_frames}: possible blur/artifact inconsistency")
 
-                reasons.append(
-                    f"Frame {analyzed_frames}: possible blur/artifact inconsistency"
-                )
-
-            # -------------------------------
-            # Lighting inconsistency
-            # -------------------------------
             brightness = gray.mean()
 
             if brightness < 35 or brightness > 220:
                 suspicious_points += 10
+                reasons.append(f"Frame {analyzed_frames}: abnormal lighting pattern")
 
-                reasons.append(
-                    f"Frame {analyzed_frames}: abnormal lighting pattern"
-                )
-
-            # -------------------------------
-            # Save frame temporarily
-            # -------------------------------
-            frame_path = f"sampled_frames/frame_{analyzed_frames}.jpg"
-
+            frame_path = os.path.join("sampled_frames", f"frame_{analyzed_frames}.jpg")
             cv2.imwrite(frame_path, frame)
 
-            # -------------------------------
-            # AI model analysis
-            # -------------------------------
-            ai_score, labels = check_frame_with_ai(frame_path)
+            ai_result = check_frame_with_ai(frame_path)
+            _cleanup_frame(frame_path)
 
-            ai_scores.append(ai_score)
+            fake_score = ai_result["fake_score"]
+            real_score = ai_result["real_score"]
+            fake_scores.append(fake_score)
+            real_scores.append(real_score)
+            ai_statuses.append(ai_result["status"])
 
             reasons.append(
-                f"Frame {analyzed_frames}: AI model score {ai_score}% | {', '.join(labels[:2])}"
+                f"Frame {analyzed_frames}: AI model fake {fake_score}% / real {real_score}% | "
+                + ", ".join(ai_result["labels"][:2])
             )
 
-            # Extra suspicion for higher AI score
-            if ai_score >= 40:
+            if fake_score >= 55:
+                suspicious_points += 25
+            elif fake_score >= 35:
                 suspicious_points += 15
 
-            os.remove(frame_path)
+            if analyzed_frames >= 10:
+                break
+    finally:
+        cap.release()
+        _cleanup(path)
 
-        # Analyze max 10 frames
-        if analyzed_frames >= 10:
-            break
-
-    cap.release()
-
-    # Cleanup uploaded video
-    if os.path.exists(path):
-        os.remove(path)
-
-    # ---------------------------------------
-    # Safety check
-    # ---------------------------------------
     if analyzed_frames == 0:
-
         return {
             "risk_score": 0,
             "risk_level": "Unable to Analyze",
-            "reasons": [
-                "Video too short or unreadable"
-            ],
-            "advice": "Upload a clearer or longer video."
+            "reasons": ["Video too short or unreadable"],
+            "advice": "Upload a clearer or longer video.",
         }
 
-    # ---------------------------------------
-    # Average AI score
-    # ---------------------------------------
-    avg_ai_score = int(
-        sum(ai_scores) / len(ai_scores)
-    ) if ai_scores else 0
+    working_ai_frames = sum(1 for status in ai_statuses if status == "ok")
 
-    # ---------------------------------------
-    # Modern AI video heuristic
-    # ---------------------------------------
-    if avg_ai_score <= 5:
-        suspicious_points += 20
+    if working_ai_frames == 0:
+        return {
+            "risk_score": min(100, suspicious_points),
+            "risk_level": "Unable to Run AI Model",
+            "frames_analyzed": analyzed_frames,
+            "reasons": reasons[:12],
+            "advice": "The AI video model could not run. Check HF_TOKEN and backend network access, then retry.",
+        }
 
-    # ---------------------------------------
-    # Final hybrid score
-    # ---------------------------------------
+    avg_fake_score = int(sum(fake_scores) / len(fake_scores)) if fake_scores else 0
+    avg_real_score = int(sum(real_scores) / len(real_scores)) if real_scores else 0
+
     final_score = min(
         100,
-        int(
-            (avg_ai_score * 0.6)
-            +
-            (suspicious_points * 0.4)
-        )
+        int((avg_fake_score * 0.75) + (suspicious_points * 0.25)),
     )
 
-    # ---------------------------------------
-    # Risk levels
-    # ---------------------------------------
-    if final_score >= 70:
-
+    if avg_fake_score >= 60 or final_score >= 70:
         level = "High Risk / Likely AI-Generated"
-
-    elif final_score >= 35:
-
+        final_score = max(final_score, 75)
+    elif avg_fake_score >= 35 or final_score >= 35:
         level = "Suspicious"
-        final_score = max(final_score, 95)
-
-    elif avg_ai_score <= 5 and analyzed_frames >= 3:
-
-        level = "Potentially AI-Enhanced"
-        final_score = max(final_score, 67)
-
+        final_score = max(final_score, 45)
+    elif avg_real_score >= 60 and avg_fake_score < 35:
+        level = "Likely Genuine"
+        final_score = min(final_score, 30)
     else:
-
         level = "Likely Genuine"
 
-    # ---------------------------------------
-    # Return analysis
-    # ---------------------------------------
     return {
-
         "risk_score": final_score,
-
         "risk_level": level,
-
         "frames_analyzed": analyzed_frames,
-
+        "average_ai_fake_score": avg_fake_score,
+        "average_ai_real_score": avg_real_score,
         "reasons": reasons[:12],
-
-        "advice":
-        "This is a hybrid frame-level analysis using AI model scoring plus visual inconsistency checks. Highly realistic AI videos may still require advanced forensic analysis."
+        "advice": (
+            "This uses a trained AI frame classifier plus visual artifact checks. "
+            "Treat AI-generated or suspicious results carefully."
+        ),
     }
