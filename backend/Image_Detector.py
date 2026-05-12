@@ -1,18 +1,17 @@
 import os
 import re
-import shutil
+from functools import lru_cache
 
 import cv2
-import pytesseract
 
-TESSERACT_CMD = (
-    os.getenv("TESSERACT_CMD")
-    or shutil.which("tesseract")
-    or r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-)
-OCR_TIMEOUT_SECONDS = int(os.getenv("OCR_TIMEOUT_SECONDS", "8"))
+try:
+    import easyocr
+except ImportError:
+    easyocr = None
 
-pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
+
+EASYOCR_LANGUAGES = os.getenv("EASYOCR_LANGUAGES", "en").split(",")
+EASYOCR_GPU = os.getenv("EASYOCR_GPU", "false").lower() == "true"
 
 
 def _cleanup(path):
@@ -20,45 +19,66 @@ def _cleanup(path):
         os.remove(path)
 
 
-def _preprocess_for_ocr(image):
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+def _resize_for_ocr(image):
+    height, width = image.shape[:2]
 
-    height, width = gray.shape[:2]
-    if width > 1200:
-        scale = 1200 / width
-        gray = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-    elif width < 700:
-        gray = cv2.resize(gray, None, fx=1.35, fy=1.35, interpolation=cv2.INTER_CUBIC)
+    if width > 1600:
+        scale = 1600 / width
+        return cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
 
-    gray = cv2.GaussianBlur(gray, (3, 3), 0)
-    return cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+    if width < 900:
+        return cv2.resize(image, None, fx=1.25, fy=1.25, interpolation=cv2.INTER_CUBIC)
+
+    return image
+
+
+@lru_cache(maxsize=1)
+def _get_reader():
+    if easyocr is None:
+        return None
+
+    return easyocr.Reader(EASYOCR_LANGUAGES, gpu=EASYOCR_GPU, verbose=False)
 
 
 def _extract_text(image):
-    processed = _preprocess_for_ocr(image)
-    config = "--oem 3 --psm 6"
-    return pytesseract.image_to_string(processed, config=config, timeout=OCR_TIMEOUT_SECONDS)
+    reader = _get_reader()
+
+    if reader is None:
+        raise RuntimeError("EasyOCR is not installed")
+
+    prepared = _resize_for_ocr(image)
+    results = reader.readtext(prepared, detail=0, paragraph=True)
+    return "\n".join(str(item) for item in results if str(item).strip())
 
 
 def get_ocr_status():
-    exists = os.path.exists(TESSERACT_CMD) or bool(shutil.which("tesseract"))
+    if easyocr is None:
+        return {
+            "ocr_available": False,
+            "engine": "EasyOCR",
+            "languages": EASYOCR_LANGUAGES,
+            "gpu": EASYOCR_GPU,
+            "error": "easyocr package is not installed",
+            "advice": "Install EasyOCR with: pip install easyocr",
+        }
 
     try:
-        version = str(pytesseract.get_tesseract_version())
+        _get_reader()
     except Exception as exc:
         return {
             "ocr_available": False,
-            "tesseract_cmd": TESSERACT_CMD,
-            "path_exists": exists,
+            "engine": "EasyOCR",
+            "languages": EASYOCR_LANGUAGES,
+            "gpu": EASYOCR_GPU,
             "error": str(exc),
-            "advice": "Install Tesseract OCR, then set TESSERACT_CMD to the tesseract.exe path.",
+            "advice": "EasyOCR is installed but could not initialize. Check model download/network access.",
         }
 
     return {
         "ocr_available": True,
-        "tesseract_cmd": TESSERACT_CMD,
-        "path_exists": exists,
-        "version": version,
+        "engine": "EasyOCR",
+        "languages": EASYOCR_LANGUAGES,
+        "gpu": EASYOCR_GPU,
         "advice": "OCR is ready.",
     }
 
@@ -77,20 +97,12 @@ def analyze_image(path):
 
         try:
             extracted_text = _extract_text(image)
-        except pytesseract.TesseractNotFoundError:
-            return {
-                "risk_score": 0,
-                "risk_level": "OCR Unavailable",
-                "reasons": ["Tesseract OCR is not installed or TESSERACT_CMD is not configured"],
-                "advice": "Install Tesseract on the backend server and set TESSERACT_CMD if needed.",
-                "extracted_text": "",
-            }
         except Exception as exc:
             return {
                 "risk_score": 0,
                 "risk_level": "OCR Error",
-                "reasons": [f"OCR could not process this image: {exc}"],
-                "advice": "Upload a clearer screenshot with readable text.",
+                "reasons": [f"EasyOCR could not process this image: {exc}"],
+                "advice": "Install EasyOCR, then upload a clearer screenshot with readable text.",
                 "extracted_text": "",
             }
 
@@ -133,7 +145,8 @@ def analyze_image(path):
                 reasons.append(f"Suspicious text found: {word}")
 
         if re.search(r"\b\d{4,8}\b", normalized_text) and any(
-            term in normalized_text for term in ["otp", "one time password", "one-time password", "code", "pin"]
+            term in normalized_text
+            for term in ["otp", "one time password", "one-time password", "code", "pin"]
         ):
             score += 25
             reasons.append("Sensitive OTP or verification code pattern detected")
