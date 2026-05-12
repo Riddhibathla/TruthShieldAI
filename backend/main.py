@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from text_detector import detect_text_scam
 from URL_Detector import detect_url_scam
 from video_detector import analyze_video
-from Image_Detector import analyze_image
+from Image_Detector import analyze_image, get_ocr_status
 import shutil
 
 app = FastAPI()
@@ -43,3 +43,7 @@ async def image_api(file: UploadFile = File(...)):
 
     result = analyze_image(file_path)
     return result
+
+@app.get("/ocr-status")
+async def ocr_status_api():
+    return get_ocr_status()

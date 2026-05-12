@@ -4,6 +4,9 @@ import cv2
 
 from ai_frame_detector import check_frame_with_ai
 
+MAX_AI_FRAMES = int(os.getenv("VIDEO_MAX_AI_FRAMES", "4"))
+FRAME_JPEG_QUALITY = int(os.getenv("VIDEO_FRAME_JPEG_QUALITY", "70"))
+
 
 def _cleanup(path):
     if path and os.path.exists(path):
@@ -15,10 +18,23 @@ def _cleanup_frame(path):
         os.remove(path)
 
 
+def _sample_frame_indexes(total_frames, fps):
+    if total_frames and total_frames > 0:
+        start = max(1, int(fps) if fps and fps > 0 else 1)
+        end = max(start + 1, total_frames - 1)
+        if MAX_AI_FRAMES == 1:
+            return [min(start, end)]
+
+        step = max(1, (end - start) // MAX_AI_FRAMES)
+        return [min(end, start + (i * step)) for i in range(MAX_AI_FRAMES)]
+
+    interval = max(30, int((fps or 30) * 1.5))
+    return [interval * (i + 1) for i in range(MAX_AI_FRAMES)]
+
+
 def analyze_video(path):
     cap = cv2.VideoCapture(path)
 
-    frame_count = 0
     analyzed_frames = 0
     fake_scores = []
     real_scores = []
@@ -27,17 +43,16 @@ def analyze_video(path):
     reasons = []
 
     os.makedirs("sampled_frames", exist_ok=True)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30
+    sample_indexes = _sample_frame_indexes(total_frames, fps)
 
     try:
-        while True:
+        for frame_index in sample_indexes:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
             ret, frame = cap.read()
 
             if not ret:
-                break
-
-            frame_count += 1
-
-            if frame_count % 30 != 0:
                 continue
 
             analyzed_frames += 1
@@ -57,8 +72,9 @@ def analyze_video(path):
                 suspicious_points += 10
                 reasons.append(f"Frame {analyzed_frames}: abnormal lighting pattern")
 
+            ai_frame = cv2.resize(frame, (384, 216), interpolation=cv2.INTER_AREA)
             frame_path = os.path.join("sampled_frames", f"frame_{analyzed_frames}.jpg")
-            cv2.imwrite(frame_path, frame)
+            cv2.imwrite(frame_path, ai_frame, [cv2.IMWRITE_JPEG_QUALITY, FRAME_JPEG_QUALITY])
 
             ai_result = check_frame_with_ai(frame_path)
             _cleanup_frame(frame_path)
@@ -79,7 +95,8 @@ def analyze_video(path):
             elif fake_score >= 35:
                 suspicious_points += 15
 
-            if analyzed_frames >= 10:
+            if fake_score >= 80 and analyzed_frames >= 2:
+                reasons.append("Stopped early after strong AI-generated signal")
                 break
     finally:
         cap.release()

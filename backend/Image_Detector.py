@@ -5,12 +5,14 @@ import shutil
 import cv2
 import pytesseract
 
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+TESSERACT_CMD = (
+    os.getenv("TESSERACT_CMD")
+    or shutil.which("tesseract")
+    or r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+)
+OCR_TIMEOUT_SECONDS = int(os.getenv("OCR_TIMEOUT_SECONDS", "8"))
 
-TESSERACT_CMD = os.getenv("TESSERACT_CMD") or shutil.which("tesseract")
-
-if TESSERACT_CMD:
-    pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
+pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
 
 
 def _cleanup(path):
@@ -20,15 +22,45 @@ def _cleanup(path):
 
 def _preprocess_for_ocr(image):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    gray = cv2.resize(gray, None, fx=1.6, fy=1.6, interpolation=cv2.INTER_CUBIC)
-    gray = cv2.bilateralFilter(gray, 9, 75, 75)
+
+    height, width = gray.shape[:2]
+    if width > 1200:
+        scale = 1200 / width
+        gray = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+    elif width < 700:
+        gray = cv2.resize(gray, None, fx=1.35, fy=1.35, interpolation=cv2.INTER_CUBIC)
+
+    gray = cv2.GaussianBlur(gray, (3, 3), 0)
     return cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
 
 
 def _extract_text(image):
     processed = _preprocess_for_ocr(image)
     config = "--oem 3 --psm 6"
-    return pytesseract.image_to_string(processed, config=config)
+    return pytesseract.image_to_string(processed, config=config, timeout=OCR_TIMEOUT_SECONDS)
+
+
+def get_ocr_status():
+    exists = os.path.exists(TESSERACT_CMD) or bool(shutil.which("tesseract"))
+
+    try:
+        version = str(pytesseract.get_tesseract_version())
+    except Exception as exc:
+        return {
+            "ocr_available": False,
+            "tesseract_cmd": TESSERACT_CMD,
+            "path_exists": exists,
+            "error": str(exc),
+            "advice": "Install Tesseract OCR, then set TESSERACT_CMD to the tesseract.exe path.",
+        }
+
+    return {
+        "ocr_available": True,
+        "tesseract_cmd": TESSERACT_CMD,
+        "path_exists": exists,
+        "version": version,
+        "advice": "OCR is ready.",
+    }
 
 
 def analyze_image(path):
