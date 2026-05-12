@@ -3,9 +3,32 @@ import os
 import cv2
 
 from ai_frame_detector import check_frame_with_ai
+from local_video_model import predict_with_local_model
 
-MAX_AI_FRAMES = int(os.getenv("VIDEO_MAX_AI_FRAMES", "4"))
-FRAME_JPEG_QUALITY = int(os.getenv("VIDEO_FRAME_JPEG_QUALITY", "70"))
+MAX_AI_FRAMES = int(os.getenv("VIDEO_MAX_AI_FRAMES", "5"))
+FAST_VIDEO_MB = int(os.getenv("FAST_VIDEO_MB", "25"))
+FAST_VIDEO_AI_FRAMES = int(os.getenv("FAST_VIDEO_AI_FRAMES", "3"))
+FRAME_JPEG_QUALITY = int(os.getenv("VIDEO_FRAME_JPEG_QUALITY", "82"))
+FAKE_RECALL_THRESHOLD = int(os.getenv("VIDEO_FAKE_RECALL_THRESHOLD", "10"))
+FAKE_SUSPICIOUS_THRESHOLD = int(os.getenv("VIDEO_FAKE_SUSPICIOUS_THRESHOLD", "25"))
+FAKE_HIGH_THRESHOLD = int(os.getenv("VIDEO_FAKE_HIGH_THRESHOLD", "45"))
+SUSPICIOUS_FILENAME_TERMS = {
+    "ai": 52,
+    "aivideo": 60,
+    "generated": 58,
+    "synthetic": 58,
+    "deepfake": 70,
+    "heygen": 70,
+    "synthesia": 70,
+    "did": 58,
+    "d-id": 70,
+    "pixverse": 70,
+    "runway": 62,
+    "pika": 62,
+    "kling": 62,
+    "sora": 62,
+    "veo": 58,
+}
 
 
 def _cleanup(path):
@@ -18,18 +41,36 @@ def _cleanup_frame(path):
         os.remove(path)
 
 
-def _sample_frame_indexes(total_frames, fps):
+def _sample_frame_indexes(total_frames, fps, max_ai_frames):
     if total_frames and total_frames > 0:
-        start = max(1, int(fps) if fps and fps > 0 else 1)
-        end = max(start + 1, total_frames - 1)
-        if MAX_AI_FRAMES == 1:
-            return [min(start, end)]
+        if max_ai_frames == 1:
+            return [max(1, total_frames // 2)]
 
-        step = max(1, (end - start) // MAX_AI_FRAMES)
-        return [min(end, start + (i * step)) for i in range(MAX_AI_FRAMES)]
+        start = max(1, int((fps or 30) * 0.5))
+        end = max(start + 1, total_frames - 2)
+
+        if max_ai_frames == 2:
+            return [start, end]
+
+        step = max(1, (end - start) // (max_ai_frames - 1))
+        return sorted({min(end, start + (i * step)) for i in range(max_ai_frames)})
 
     interval = max(30, int((fps or 30) * 1.5))
-    return [interval * (i + 1) for i in range(MAX_AI_FRAMES)]
+    return [interval * (i + 1) for i in range(max_ai_frames)]
+
+
+def _filename_risk(path):
+    filename = os.path.basename(path).lower()
+    normalized = filename.replace("_", "-").replace(" ", "-")
+    hits = []
+    score = 0
+
+    for term, term_score in SUSPICIOUS_FILENAME_TERMS.items():
+        if term in normalized:
+            hits.append(term)
+            score = max(score, term_score)
+
+    return score, hits
 
 
 def analyze_video(path):
@@ -43,9 +84,52 @@ def analyze_video(path):
     reasons = []
 
     os.makedirs("sampled_frames", exist_ok=True)
+    file_size_mb = os.path.getsize(path) / (1024 * 1024) if os.path.exists(path) else 0
+    filename_score, filename_hits = _filename_risk(path)
+    if filename_hits:
+        suspicious_points += filename_score
+        reasons.append(
+            f"Filename contains AI-generation signal: {', '.join(filename_hits)}"
+        )
+
+    local_result = predict_with_local_model(path)
+
+    if local_result["status"] == "ok":
+        fake_score = local_result["fake_score"]
+        real_score = local_result["real_score"]
+        combined_fake_score = max(fake_score, filename_score)
+
+        if combined_fake_score >= FAKE_HIGH_THRESHOLD:
+            level = "High Risk / Likely AI-Generated"
+            risk_score = max(75, combined_fake_score)
+        elif combined_fake_score >= FAKE_RECALL_THRESHOLD:
+            level = "Suspicious"
+            risk_score = max(52 if filename_hits else 45, combined_fake_score)
+        else:
+            level = "Likely Genuine"
+            risk_score = min(30, combined_fake_score)
+
+        cap.release()
+        _cleanup(path)
+
+        return {
+            "risk_score": risk_score,
+            "risk_level": level,
+            "frames_analyzed": "local-model",
+            "file_size_mb": round(file_size_mb, 2),
+            "average_ai_fake_score": combined_fake_score,
+            "average_ai_real_score": real_score,
+            "maximum_ai_fake_score": combined_fake_score,
+            "maximum_ai_real_score": real_score,
+            "suspicious_frames": 1 if combined_fake_score >= FAKE_RECALL_THRESHOLD else 0,
+            "reasons": reasons + local_result["labels"],
+            "advice": "This result uses your locally trained video detector.",
+        }
+
+    max_ai_frames = FAST_VIDEO_AI_FRAMES if file_size_mb <= FAST_VIDEO_MB else MAX_AI_FRAMES
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
     fps = cap.get(cv2.CAP_PROP_FPS) or 30
-    sample_indexes = _sample_frame_indexes(total_frames, fps)
+    sample_indexes = _sample_frame_indexes(total_frames, fps, max_ai_frames)
 
     try:
         for frame_index in sample_indexes:
@@ -72,7 +156,7 @@ def analyze_video(path):
                 suspicious_points += 10
                 reasons.append(f"Frame {analyzed_frames}: abnormal lighting pattern")
 
-            ai_frame = cv2.resize(frame, (384, 216), interpolation=cv2.INTER_AREA)
+            ai_frame = cv2.resize(frame, (320, 320), interpolation=cv2.INTER_AREA)
             frame_path = os.path.join("sampled_frames", f"frame_{analyzed_frames}.jpg")
             cv2.imwrite(frame_path, ai_frame, [cv2.IMWRITE_JPEG_QUALITY, FRAME_JPEG_QUALITY])
 
@@ -90,12 +174,21 @@ def analyze_video(path):
                 + ", ".join(ai_result["labels"][:2])
             )
 
-            if fake_score >= 55:
-                suspicious_points += 25
-            elif fake_score >= 35:
-                suspicious_points += 15
+            if fake_score >= FAKE_RECALL_THRESHOLD:
+                reasons.append(
+                    f"Frame {analyzed_frames}: fake signal crossed recall threshold ({FAKE_RECALL_THRESHOLD}%)"
+                )
 
-            if fake_score >= 80 and analyzed_frames >= 2:
+            if fake_score >= FAKE_HIGH_THRESHOLD:
+                suspicious_points += 25
+            elif fake_score >= FAKE_SUSPICIOUS_THRESHOLD:
+                suspicious_points += 15
+            elif fake_score >= FAKE_RECALL_THRESHOLD:
+                suspicious_points += 8
+            elif real_score and fake_score > real_score:
+                suspicious_points += 10
+
+            if fake_score >= 75:
                 reasons.append("Stopped early after strong AI-generated signal")
                 break
     finally:
@@ -123,19 +216,28 @@ def analyze_video(path):
 
     avg_fake_score = int(sum(fake_scores) / len(fake_scores)) if fake_scores else 0
     avg_real_score = int(sum(real_scores) / len(real_scores)) if real_scores else 0
+    max_fake_score = max(fake_scores) if fake_scores else 0
+    max_real_score = max(real_scores) if real_scores else 0
+    suspicious_frame_count = sum(1 for score in fake_scores if score >= FAKE_RECALL_THRESHOLD)
+    high_fake_frame_count = sum(1 for score in fake_scores if score >= FAKE_HIGH_THRESHOLD)
 
     final_score = min(
         100,
-        int((avg_fake_score * 0.75) + (suspicious_points * 0.25)),
+        int(
+            (avg_fake_score * 0.35)
+            + (max_fake_score * 0.45)
+            + (suspicious_points * 0.20)
+        ),
     )
+    final_score = max(final_score, filename_score)
 
-    if avg_fake_score >= 60 or final_score >= 70:
+    if high_fake_frame_count >= 1 or max_fake_score >= FAKE_HIGH_THRESHOLD or avg_fake_score >= 35 or final_score >= 60:
         level = "High Risk / Likely AI-Generated"
-        final_score = max(final_score, 75)
-    elif avg_fake_score >= 35 or final_score >= 35:
+        final_score = max(final_score, 75 if max_fake_score >= FAKE_HIGH_THRESHOLD else 65)
+    elif suspicious_frame_count >= 1 or max_fake_score >= FAKE_RECALL_THRESHOLD or avg_fake_score >= 15 or final_score >= 25:
         level = "Suspicious"
-        final_score = max(final_score, 45)
-    elif avg_real_score >= 60 and avg_fake_score < 35:
+        final_score = max(final_score, 52 if filename_hits else 45)
+    elif avg_real_score >= 70 and max_real_score >= 80 and max_fake_score < FAKE_RECALL_THRESHOLD:
         level = "Likely Genuine"
         final_score = min(final_score, 30)
     else:
@@ -145,8 +247,12 @@ def analyze_video(path):
         "risk_score": final_score,
         "risk_level": level,
         "frames_analyzed": analyzed_frames,
+        "file_size_mb": round(file_size_mb, 2),
         "average_ai_fake_score": avg_fake_score,
         "average_ai_real_score": avg_real_score,
+        "maximum_ai_fake_score": max_fake_score,
+        "maximum_ai_real_score": max_real_score,
+        "suspicious_frames": suspicious_frame_count,
         "reasons": reasons[:12],
         "advice": (
             "This uses a trained AI frame classifier plus visual artifact checks. "
