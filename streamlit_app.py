@@ -17,12 +17,7 @@ from text_detector import detect_text_scam
 from video_detector import analyze_video
 
 
-st.set_page_config(
-    page_title="Truth Shield AI",
-    page_icon="🛡️",
-    layout="wide",
-)
-
+st.set_page_config(page_title="Truth Shield AI", page_icon="🛡️", layout="wide")
 
 st.markdown(
     """
@@ -34,31 +29,33 @@ st.markdown(
       }
 
       .block-container {
-        padding-top: 2.5rem;
+        padding-top: 2.4rem;
         padding-bottom: 4rem;
-        max-width: 1180px;
+        max-width: 1280px;
+      }
+
+      header[data-testid="stHeader"] {
+        background: transparent;
       }
 
       .hero {
         text-align: center;
-        padding: 2.8rem 1rem 2.2rem;
+        padding: 2.4rem 1rem 2.2rem;
       }
 
       .badge {
         display: inline-block;
-        padding: 0.55rem 1rem;
-        border: 1px solid rgba(255,255,255,0.12);
+        padding: 0.6rem 1.1rem;
         border-radius: 999px;
         background: rgba(255,255,255,0.05);
-        color: #f5f5f5;
+        border: 1px solid rgba(255,255,255,0.1);
         font-weight: 800;
-        font-size: 0.78rem;
         letter-spacing: 0.08em;
       }
 
       .hero h1 {
-        margin: 1.25rem 0 0.85rem;
-        font-size: clamp(2.7rem, 6vw, 4.6rem);
+        margin: 1.35rem 0 1rem;
+        font-size: clamp(2.7rem, 6vw, 4.8rem);
         line-height: 1.08;
         font-weight: 900;
         background: linear-gradient(110deg, #ffffff 0%, #9ca3af 50%, #ffffff 100%);
@@ -70,18 +67,19 @@ st.markdown(
 
       .hero p {
         color: #d1d5db;
-        max-width: 820px;
+        max-width: 850px;
         margin: 0 auto;
         line-height: 1.7;
         font-size: 1.08rem;
       }
 
       .metric-card {
+        background: rgba(255,255,255,0.03);
         border: 1px solid rgba(255,255,255,0.08);
         border-radius: 24px;
-        padding: 1.15rem;
-        background: rgba(255,255,255,0.035);
+        padding: 1.35rem;
         text-align: center;
+        backdrop-filter: blur(16px);
       }
 
       .metric-card b {
@@ -93,6 +91,47 @@ st.markdown(
         color: #9ca3af;
       }
 
+      .section-label {
+        margin: 3rem 0 1.1rem;
+        font-size: 0.95rem;
+        font-weight: 900;
+        letter-spacing: 0.12em;
+        color: #d1d5db;
+      }
+
+      .st-key-card_text,
+      .st-key-card_url,
+      .st-key-card_image,
+      .st-key-card_video,
+      .st-key-accuracy_panel {
+        background: rgba(255,255,255,0.035);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 28px;
+        padding: 1.6rem;
+        backdrop-filter: blur(18px);
+        min-height: 100%;
+      }
+
+      .st-key-card_text:hover,
+      .st-key-card_url:hover,
+      .st-key-card_image:hover,
+      .st-key-card_video:hover {
+        box-shadow:
+          0 30px 80px rgba(0,0,0,0.75),
+          0 0 45px rgba(255,255,255,0.08);
+      }
+
+      .card-icon {
+        width: 60px;
+        height: 60px;
+        display: grid;
+        place-items: center;
+        border-radius: 20px;
+        background: rgba(255,255,255,0.05);
+        margin-bottom: 1rem;
+        font-size: 1.7rem;
+      }
+
       .result-box {
         border: 1px solid rgba(255,255,255,0.08);
         border-radius: 24px;
@@ -101,13 +140,14 @@ st.markdown(
         margin-top: 1rem;
       }
 
+      .stButton > button {
+        border-radius: 16px;
+        font-weight: 800;
+      }
+
       @keyframes textGlimmer {
         0% { background-position: 220% center; }
         100% { background-position: -220% center; }
-      }
-
-      div[data-testid="stTabs"] button {
-        color: white;
       }
     </style>
     """,
@@ -124,19 +164,15 @@ def save_upload(uploaded_file, suffix):
 def risk_badge(level):
     if not level:
         return "Unknown"
-
     if "High" in level or "Fake" in level or "Manipulated" in level:
         return "🔴 " + level
-
     if "Suspicious" in level or "Potentially" in level:
         return "🟡 " + level
-
     return "🟢 " + level
 
 
 def render_result(result):
     st.markdown('<div class="result-box">', unsafe_allow_html=True)
-
     col_score, col_level = st.columns(2)
     col_score.metric("Risk Score", f"{result.get('risk_score', 0)}/100")
     col_level.metric("Risk Level", risk_badge(result.get("risk_level", "Unknown")))
@@ -153,7 +189,6 @@ def render_result(result):
 
     if result.get("frames_analyzed"):
         st.caption(f"Frames analyzed: {result['frames_analyzed']}")
-
     if result.get("file_size_mb"):
         st.caption(f"File size: {result['file_size_mb']} MB")
 
@@ -183,74 +218,65 @@ with metric_cols[1]:
 with metric_cols[2]:
     st.markdown('<div class="metric-card"><b>AI</b><span>Risk Scoring</span></div>', unsafe_allow_html=True)
 
-st.divider()
+st.markdown('<div class="section-label">SCANNER</div>', unsafe_allow_html=True)
 
-tabs = st.tabs(["🧠 Text", "🔗 URL", "🖼️ Image OCR", "🎥 Video AI", "📈 Accuracy"])
+row_one = st.columns(2)
+with row_one[0]:
+    with st.container(key="card_text"):
+        st.markdown('<div class="card-icon">🧠</div>', unsafe_allow_html=True)
+        st.subheader("Text Detector")
+        st.write("Paste suspicious messages, scam texts or phishing content.")
+        text = st.text_area("Paste suspicious message", height=150)
+        if st.button("Analyze Text", key="text_button"):
+            render_result(detect_text_scam(text))
 
-with tabs[0]:
-    st.subheader("Text Detector")
-    text = st.text_area("Paste suspicious message", height=170)
+with row_one[1]:
+    with st.container(key="card_url"):
+        st.markdown('<div class="card-icon">🔗</div>', unsafe_allow_html=True)
+        st.subheader("URL Detector")
+        st.write("Analyze suspicious links, phishing domains and fake Web3 URLs.")
+        url = st.text_input("Paste suspicious URL", placeholder="rnicrosoft.com")
+        if st.button("Analyze URL", key="url_button"):
+            render_result(detect_url_scam(url))
 
-    if st.button("Analyze Text", key="text_button"):
-        render_result(detect_text_scam(text))
+row_two = st.columns(2)
+with row_two[0]:
+    with st.container(key="card_image"):
+        st.markdown('<div class="card-icon">🖼️</div>', unsafe_allow_html=True)
+        st.subheader("Image Detector")
+        st.write("Upload screenshots for OCR-based phishing and scam analysis.")
+        ocr_status = get_ocr_status()
+        if ocr_status.get("ocr_available"):
+            st.success(f"{ocr_status.get('engine', 'OCR')} is ready.")
+        else:
+            st.warning(ocr_status.get("advice", "OCR is not available."))
+        image_file = st.file_uploader("Upload screenshot", type=["png", "jpg", "jpeg", "webp"], key="image_file")
+        if image_file and st.button("Analyze Image", key="image_button"):
+            image_path = save_upload(image_file, os.path.splitext(image_file.name)[1] or ".png")
+            with st.spinner("Reading screenshot with OCR..."):
+                render_result(analyze_image(image_path))
 
-with tabs[1]:
-    st.subheader("URL Detector")
-    url = st.text_input("Paste suspicious URL", placeholder="rnicrosoft.com")
+with row_two[1]:
+    with st.container(key="card_video"):
+        st.markdown('<div class="card-icon">🎥</div>', unsafe_allow_html=True)
+        st.subheader("Video Detector")
+        st.write("Analyze AI-generated video risks and deepfake inconsistencies.")
+        video_file = st.file_uploader("Upload video", type=["mp4", "mov", "avi", "mkv", "webm"], key="video_file")
+        if video_file and st.button("Analyze Video", key="video_button"):
+            video_path = save_upload(video_file, os.path.splitext(video_file.name)[1] or ".mp4")
+            with st.spinner("Analyzing sampled video frames..."):
+                render_result(analyze_video(video_path))
 
-    if st.button("Analyze URL", key="url_button"):
-        render_result(detect_url_scam(url))
-
-with tabs[2]:
-    st.subheader("Image Detector")
-    ocr_status = get_ocr_status()
-
-    if ocr_status.get("ocr_available"):
-        st.success(f"{ocr_status.get('engine', 'OCR')} is ready.")
-    else:
-        st.warning(ocr_status.get("advice", "OCR is not available."))
-
-    image_file = st.file_uploader(
-        "Upload screenshot",
-        type=["png", "jpg", "jpeg", "webp"],
-        key="image_file",
-    )
-
-    if image_file and st.button("Analyze Image", key="image_button"):
-        suffix = os.path.splitext(image_file.name)[1] or ".png"
-        image_path = save_upload(image_file, suffix)
-
-        with st.spinner("Reading screenshot with OCR..."):
-            render_result(analyze_image(image_path))
-
-with tabs[3]:
-    st.subheader("Video Detector")
-    st.caption("For Streamlit Cloud, keep uploads compact for faster analysis.")
-
-    video_file = st.file_uploader(
-        "Upload video",
-        type=["mp4", "mov", "avi", "mkv", "webm"],
-        key="video_file",
-    )
-
-    if video_file and st.button("Analyze Video", key="video_button"):
-        suffix = os.path.splitext(video_file.name)[1] or ".mp4"
-        video_path = save_upload(video_file, suffix)
-
-        with st.spinner("Analyzing sampled video frames..."):
-            render_result(analyze_video(video_path))
-
-with tabs[4]:
-    st.subheader("Model Accuracy & Evaluation")
+st.markdown('<div class="section-label">ACCURACY</div>', unsafe_allow_html=True)
+with st.container(key="accuracy_panel"):
+    st.subheader("📈 Model Accuracy & Evaluation")
     st.write(
         "Truth Shield AI uses a hybrid detection approach combining OCR, phishing pattern analysis, "
         "URL intelligence, filename hints, local trainable video features, and AI-based frame scoring."
     )
-
     accuracy_cols = st.columns(4)
     accuracy_cols[0].metric("Text Scam Detection", "~85%")
     accuracy_cols[1].metric("OCR Image Scam Detection", "~80%")
     accuracy_cols[2].metric("URL Risk Detection", "~75%")
     accuracy_cols[3].metric("Video AI Risk Detection", "Prototype")
-
     st.caption("Prototype values are not forensic guarantees. Train the local video model for your target clips.")
