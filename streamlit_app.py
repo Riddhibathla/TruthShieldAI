@@ -1,5 +1,6 @@
 import html
 import os
+import re
 import sys
 import tempfile
 
@@ -435,7 +436,10 @@ st.markdown(
 
 
 def save_upload(uploaded_file, suffix):
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+    original_name = os.path.splitext(uploaded_file.name or "upload")[0]
+    safe_name = re.sub(r"[^a-zA-Z0-9_-]+", "_", original_name).strip("_") or "upload"
+
+    with tempfile.NamedTemporaryFile(delete=False, prefix=f"{safe_name}_", suffix=suffix) as temp_file:
         temp_file.write(uploaded_file.getbuffer())
         return temp_file.name
 

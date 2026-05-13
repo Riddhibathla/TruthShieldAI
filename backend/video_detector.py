@@ -15,14 +15,20 @@ FAKE_HIGH_THRESHOLD = int(os.getenv("VIDEO_FAKE_HIGH_THRESHOLD", "45"))
 SUSPICIOUS_FILENAME_TERMS = {
     "ai": 52,
     "aivideo": 60,
+    "openai": 75,
+    "open-ai": 75,
     "generated": 58,
     "synthetic": 58,
     "deepfake": 70,
     "heygen": 70,
+    "hey-gen": 70,
+    "hygen": 70,
+    "hy-gen": 70,
     "synthesia": 70,
     "did": 58,
     "d-id": 70,
     "pixverse": 70,
+    "pix-verse": 70,
     "runway": 62,
     "pika": 62,
     "kling": 62,
@@ -210,8 +216,12 @@ def analyze_video(path):
         score = 0
 
         if filename_hits:
-            level = "Suspicious"
-            score = max(52, filename_score)
+            if filename_score >= FAKE_HIGH_THRESHOLD:
+                level = "High Risk / Likely AI-Generated"
+                score = max(75, filename_score)
+            else:
+                level = "Suspicious"
+                score = max(52, filename_score)
 
         return {
             "risk_score": score,
