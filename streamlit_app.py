@@ -176,11 +176,11 @@ st.markdown(
       }
 
       .section-label {
-        margin: 3rem 0 1.1rem;
-        font-size: 0.95rem;
+        margin: 3rem 0 1.2rem;
+        font-size: 1.9rem;
         font-weight: 900;
-        letter-spacing: 0.12em;
-        color: #d1d5db;
+        letter-spacing: 0;
+        color: white;
       }
 
       .st-key-card_text,
@@ -245,30 +245,34 @@ st.markdown(
 
       .result-box {
         border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 24px;
-        padding: 1.4rem;
+        border-radius: 28px;
+        padding: 1.8rem;
         background: rgba(255,255,255,0.035);
         margin-top: 1rem;
       }
 
       .report-title {
         margin: 0 0 1.25rem;
-        font-size: 1.55rem;
+        font-size: 1.8rem;
         font-weight: 900;
       }
 
       .report-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
         gap: 1rem;
-        margin: 1rem 0 1.3rem;
+        margin: 1.2rem 0 1.4rem;
+        padding: 1.1rem 0;
+        border-top: 1px solid rgba(255,255,255,0.08);
+        border-bottom: 1px solid rgba(255,255,255,0.08);
       }
 
       .report-stat {
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 18px;
-        padding: 1rem;
-        background: rgba(255,255,255,0.03);
+        border: none;
+        border-radius: 0;
+        padding: 0;
+        background: transparent;
       }
 
       .report-stat span {
@@ -282,7 +286,7 @@ st.markdown(
       .report-stat strong {
         display: block;
         color: white;
-        font-size: 2rem;
+        font-size: 2.2rem;
         line-height: 1.1;
         font-weight: 900;
       }
@@ -290,12 +294,12 @@ st.markdown(
       .risk-pill {
         display: inline-flex;
         align-items: center;
-        gap: 0.55rem;
-        padding: 0.58rem 0.85rem;
-        border-radius: 999px;
-        border: 1px solid rgba(255,255,255,0.14);
-        background: rgba(255,255,255,0.05);
-        font-size: 1.05rem;
+        gap: 0.6rem;
+        padding: 0;
+        border-radius: 0;
+        border: none;
+        background: transparent;
+        font-size: 1.2rem;
         font-weight: 900;
       }
 
@@ -320,8 +324,8 @@ st.markdown(
       }
 
       .report-section-title {
-        margin: 1.2rem 0 0.7rem;
-        font-size: 1.25rem;
+        margin: 1.4rem 0 0.8rem;
+        font-size: 1.35rem;
         font-weight: 900;
       }
 
@@ -329,6 +333,60 @@ st.markdown(
         margin: 0;
         padding-left: 1.2rem;
         color: #d1d5db;
+      }
+
+      .accuracy-title {
+        margin: 0 0 1rem;
+        font-size: 1.7rem;
+        font-weight: 900;
+      }
+
+      .accuracy-copy {
+        color: #d1d5db;
+        line-height: 1.7;
+        margin-bottom: 1.2rem;
+      }
+
+      .accuracy-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 1rem;
+      }
+
+      .accuracy-item {
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 18px;
+        padding: 1rem;
+      }
+
+      .accuracy-item b {
+        display: block;
+        font-size: 0.95rem;
+        margin-bottom: 0.6rem;
+      }
+
+      .accuracy-item span {
+        display: block;
+        font-size: 1.9rem;
+        font-weight: 900;
+        color: white;
+        margin-bottom: 0.45rem;
+      }
+
+      .accuracy-item p {
+        color: #9ca3af;
+        font-size: 0.92rem;
+        line-height: 1.45;
+        margin: 0;
+      }
+
+      @media (max-width: 900px) {
+        .report-grid,
+        .accuracy-grid {
+          display: grid;
+          grid-template-columns: 1fr;
+        }
       }
 
       .stButton > button {
@@ -462,7 +520,7 @@ with metric_cols[1]:
 with metric_cols[2]:
     st.markdown('<div class="metric-card"><b>AI</b><span>Risk Scoring</span></div>', unsafe_allow_html=True)
 
-st.markdown('<div class="section-label">SCANNER</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-label">Scanner</div>', unsafe_allow_html=True)
 
 row_one = st.columns(2)
 with row_one[0]:
@@ -511,16 +569,38 @@ with row_two[1]:
             with st.spinner("Analyzing sampled video frames..."):
                 render_result(analyze_video(video_path))
 
-st.markdown('<div class="section-label">ACCURACY</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-label">Accuracy</div>', unsafe_allow_html=True)
 with st.container(key="accuracy_panel"):
-    st.subheader("📈 Model Accuracy & Evaluation")
-    st.write(
-        "Truth Shield AI uses a hybrid detection approach combining OCR, phishing pattern analysis, "
-        "URL intelligence, filename hints, local trainable video features, and AI-based frame scoring."
+    st.markdown(
+        """
+        <h2 class="accuracy-title">Model Accuracy & Evaluation</h2>
+        <p class="accuracy-copy">
+          Truth Shield AI uses a hybrid detection approach combining OCR, phishing pattern analysis,
+          URL intelligence, filename hints, local trainable video features, and AI-based frame scoring.
+        </p>
+        <div class="accuracy-grid">
+          <div class="accuracy-item">
+            <b>Text Scam Detection</b>
+            <span>~85%</span>
+            <p>Detects phishing, urgency manipulation, scam language and social engineering patterns.</p>
+          </div>
+          <div class="accuracy-item">
+            <b>OCR Image Scam Detection</b>
+            <span>~80%</span>
+            <p>Reads screenshots using OCR and detects suspicious scam indicators.</p>
+          </div>
+          <div class="accuracy-item">
+            <b>URL Risk Detection</b>
+            <span>~75%</span>
+            <p>Detects suspicious domains, shortened links and Web3 scam structures.</p>
+          </div>
+          <div class="accuracy-item">
+            <b>Video AI Risk Detection</b>
+            <span>Prototype</span>
+            <p>Uses sampled video frames, filename hints, and local trainable model scoring.</p>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
-    accuracy_cols = st.columns(4)
-    accuracy_cols[0].metric("Text Scam Detection", "~85%")
-    accuracy_cols[1].metric("OCR Image Scam Detection", "~80%")
-    accuracy_cols[2].metric("URL Risk Detection", "~75%")
-    accuracy_cols[3].metric("Video AI Risk Detection", "Prototype")
     st.caption("Prototype values are not forensic guarantees. Train the local video model for your target clips.")
