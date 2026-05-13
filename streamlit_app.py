@@ -1,3 +1,4 @@
+import html
 import os
 import sys
 import tempfile
@@ -22,25 +23,102 @@ st.set_page_config(page_title="Truth Shield AI", page_icon="🛡️", layout="wi
 st.markdown(
     """
     <style>
+      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap");
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html, body, .stApp, [class*="css"] {
+        font-family: "Inter", system-ui, sans-serif !important;
+      }
+
       .stApp {
         background:
           radial-gradient(circle at top left, #1a1a1a 0%, #050505 42%, #000000 100%);
         color: white;
       }
 
-      .block-container {
-        padding-top: 2.4rem;
-        padding-bottom: 4rem;
-        max-width: 1280px;
+      .stApp::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background-image: radial-gradient(rgba(255,255,255,0.12) 1px, transparent 1px);
+        background-size: 32px 32px;
+        opacity: 0.08;
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      .stApp::after {
+        content: "";
+        position: fixed;
+        width: 420px;
+        height: 420px;
+        border-radius: 999px;
+        background: rgba(255,255,255,0.06);
+        filter: blur(90px);
+        top: 18%;
+        right: -140px;
+        pointer-events: none;
+        z-index: 0;
       }
 
       header[data-testid="stHeader"] {
         background: transparent;
       }
 
+      .block-container {
+        position: relative;
+        z-index: 1;
+        padding-top: 2.35rem;
+        padding-bottom: 4rem;
+        max-width: 1280px;
+      }
+
+      .top-nav {
+        max-width: 1120px;
+        margin: 0 auto 34px;
+        padding: 14px 18px;
+        border-radius: 22px;
+        background: rgba(255,255,255,0.035);
+        border: 1px solid rgba(255,255,255,0.08);
+        backdrop-filter: blur(18px);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .brand {
+        font-weight: 900;
+        color: white;
+      }
+
+      .emoji {
+        font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", emoji, sans-serif !important;
+        -webkit-text-fill-color: initial !important;
+        background: none !important;
+        filter: none !important;
+      }
+
+      .nav-pill {
+        display: inline-flex;
+        gap: 12px;
+      }
+
+      .nav-pill span {
+        padding: 10px 16px;
+        border-radius: 999px;
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.08);
+        color: white;
+        font-weight: 700;
+        font-size: 0.92rem;
+      }
+
       .hero {
         text-align: center;
-        padding: 2.4rem 1rem 2.2rem;
+        padding: 0.4rem 1rem 2.2rem;
       }
 
       .badge {
@@ -80,6 +158,12 @@ st.markdown(
         padding: 1.35rem;
         text-align: center;
         backdrop-filter: blur(16px);
+        transition: 0.3s ease;
+      }
+
+      .metric-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 24px 70px rgba(0,0,0,0.55);
       }
 
       .metric-card b {
@@ -104,21 +188,48 @@ st.markdown(
       .st-key-card_image,
       .st-key-card_video,
       .st-key-accuracy_panel {
+        position: relative;
+        overflow: hidden;
         background: rgba(255,255,255,0.035);
         border: 1px solid rgba(255,255,255,0.08);
         border-radius: 28px;
         padding: 1.6rem;
         backdrop-filter: blur(18px);
         min-height: 100%;
+        transition: 0.3s ease;
+      }
+
+      .st-key-card_text::before,
+      .st-key-card_url::before,
+      .st-key-card_image::before,
+      .st-key-card_video::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(120deg, transparent 0%, rgba(255,255,255,0.09) 48%, transparent 56%);
+        transform: translateX(-120%);
+        transition: transform 0.7s ease;
+        pointer-events: none;
       }
 
       .st-key-card_text:hover,
       .st-key-card_url:hover,
       .st-key-card_image:hover,
       .st-key-card_video:hover {
+        transform: translateY(-8px);
+        border-color: rgba(255,255,255,0.34);
+        background: rgba(255,255,255,0.065);
         box-shadow:
-          0 30px 80px rgba(0,0,0,0.75),
-          0 0 45px rgba(255,255,255,0.08);
+          0 34px 90px rgba(0,0,0,0.9),
+          0 0 85px rgba(255,255,255,0.22),
+          inset 0 0 0 1px rgba(255,255,255,0.18);
+      }
+
+      .st-key-card_text:hover::before,
+      .st-key-card_url:hover::before,
+      .st-key-card_image:hover::before,
+      .st-key-card_video:hover::before {
+        transform: translateX(120%);
       }
 
       .card-icon {
@@ -140,9 +251,109 @@ st.markdown(
         margin-top: 1rem;
       }
 
+      .report-title {
+        margin: 0 0 1.25rem;
+        font-size: 1.55rem;
+        font-weight: 900;
+      }
+
+      .report-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1rem;
+        margin: 1rem 0 1.3rem;
+      }
+
+      .report-stat {
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 18px;
+        padding: 1rem;
+        background: rgba(255,255,255,0.03);
+      }
+
+      .report-stat span {
+        display: block;
+        color: #9ca3af;
+        font-size: 0.88rem;
+        font-weight: 700;
+        margin-bottom: 0.55rem;
+      }
+
+      .report-stat strong {
+        display: block;
+        color: white;
+        font-size: 2rem;
+        line-height: 1.1;
+        font-weight: 900;
+      }
+
+      .risk-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        padding: 0.58rem 0.85rem;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,0.14);
+        background: rgba(255,255,255,0.05);
+        font-size: 1.05rem;
+        font-weight: 900;
+      }
+
+      .risk-dot {
+        width: 0.82rem;
+        height: 0.82rem;
+        border-radius: 999px;
+        background: #f5f5f5;
+        box-shadow: 0 0 18px rgba(255,255,255,0.2);
+      }
+
+      .risk-dot.danger {
+        background: #f87171;
+      }
+
+      .risk-dot.warning {
+        background: #facc15;
+      }
+
+      .risk-dot.safe {
+        background: #4ade80;
+      }
+
+      .report-section-title {
+        margin: 1.2rem 0 0.7rem;
+        font-size: 1.25rem;
+        font-weight: 900;
+      }
+
+      .reason-list {
+        margin: 0;
+        padding-left: 1.2rem;
+        color: #d1d5db;
+      }
+
       .stButton > button {
         border-radius: 16px;
         font-weight: 800;
+        border: none;
+        padding: 0.78rem 1.25rem;
+        background: white;
+        color: #111111;
+        transition: 0.3s ease;
+      }
+
+      .stButton > button:hover {
+        transform: translateY(-2px);
+        border: none;
+        color: #111111;
+        box-shadow: 0 16px 40px rgba(255,255,255,0.08);
+      }
+
+      textarea,
+      input {
+        background: rgba(255,255,255,0.04) !important;
+        border: 1px solid rgba(255,255,255,0.08) !important;
+        border-radius: 18px !important;
+        color: white !important;
       }
 
       @keyframes textGlimmer {
@@ -161,30 +372,55 @@ def save_upload(uploaded_file, suffix):
         return temp_file.name
 
 
-def risk_badge(level):
+def risk_class(level):
     if not level:
-        return "Unknown"
+        return "safe"
     if "High" in level or "Fake" in level or "Manipulated" in level:
-        return "🔴 " + level
+        return "danger"
     if "Suspicious" in level or "Potentially" in level:
-        return "🟡 " + level
-    return "🟢 " + level
+        return "warning"
+    return "safe"
 
 
 def render_result(result):
-    st.markdown('<div class="result-box">', unsafe_allow_html=True)
-    col_score, col_level = st.columns(2)
-    col_score.metric("Risk Score", f"{result.get('risk_score', 0)}/100")
-    col_level.metric("Risk Level", risk_badge(result.get("risk_level", "Unknown")))
-
+    score = result.get("risk_score", 0)
+    level = result.get("risk_level", "Unknown")
+    dot_class = risk_class(level)
     reasons = result.get("reasons") or []
+
+    st.markdown(
+        f"""
+        <div class="result-box">
+          <h2 class="report-title">Analysis Report</h2>
+          <div class="report-grid">
+            <div class="report-stat">
+              <span>Risk Score</span>
+              <strong>{score}/100</strong>
+            </div>
+            <div class="report-stat">
+              <span>Risk Level</span>
+              <div class="risk-pill">
+                <i class="risk-dot {dot_class}"></i>
+                {html.escape(str(level))}
+              </div>
+            </div>
+          </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     if reasons:
-        st.subheader("⚠️ Red Flags")
-        for reason in reasons:
-            st.write(f"- {reason}")
+        reason_items = "".join(f"<li>{html.escape(str(reason))}</li>" for reason in reasons)
+        st.markdown(
+            f"""
+            <h3 class="report-section-title">Red Flags</h3>
+            <ul class="reason-list">{reason_items}</ul>
+            """,
+            unsafe_allow_html=True,
+        )
 
     if result.get("extracted_text"):
-        st.subheader("🧾 Extracted Text")
+        st.markdown('<h3 class="report-section-title">Extracted Text</h3>', unsafe_allow_html=True)
         st.code(result["extracted_text"])
 
     if result.get("frames_analyzed"):
@@ -198,9 +434,17 @@ def render_result(result):
 
 st.markdown(
     """
+    <nav class="top-nav">
+      <div class="brand"><span class="emoji">🛡️</span> Truth Shield AI</div>
+      <div class="nav-pill">
+        <span>Scanner</span>
+        <span>Accuracy</span>
+      </div>
+    </nav>
+
     <section class="hero">
       <span class="badge">A ONE STEP SOLUTION</span>
-      <h1>🛡️ Truth Shield AI</h1>
+      <h1><span class="emoji">🛡️</span> Truth Shield AI</h1>
       <p>
         A premium multimodal safety platform that detects scams, phishing,
         manipulated screenshots and AI-generated video risks in one place.
@@ -223,7 +467,7 @@ st.markdown('<div class="section-label">SCANNER</div>', unsafe_allow_html=True)
 row_one = st.columns(2)
 with row_one[0]:
     with st.container(key="card_text"):
-        st.markdown('<div class="card-icon">🧠</div>', unsafe_allow_html=True)
+        st.markdown('<div class="card-icon"><span class="emoji">🧠</span></div>', unsafe_allow_html=True)
         st.subheader("Text Detector")
         st.write("Paste suspicious messages, scam texts or phishing content.")
         text = st.text_area("Paste suspicious message", height=150)
@@ -232,7 +476,7 @@ with row_one[0]:
 
 with row_one[1]:
     with st.container(key="card_url"):
-        st.markdown('<div class="card-icon">🔗</div>', unsafe_allow_html=True)
+        st.markdown('<div class="card-icon"><span class="emoji">🔗</span></div>', unsafe_allow_html=True)
         st.subheader("URL Detector")
         st.write("Analyze suspicious links, phishing domains and fake Web3 URLs.")
         url = st.text_input("Paste suspicious URL", placeholder="rnicrosoft.com")
@@ -242,7 +486,7 @@ with row_one[1]:
 row_two = st.columns(2)
 with row_two[0]:
     with st.container(key="card_image"):
-        st.markdown('<div class="card-icon">🖼️</div>', unsafe_allow_html=True)
+        st.markdown('<div class="card-icon"><span class="emoji">🖼️</span></div>', unsafe_allow_html=True)
         st.subheader("Image Detector")
         st.write("Upload screenshots for OCR-based phishing and scam analysis.")
         ocr_status = get_ocr_status()
@@ -258,7 +502,7 @@ with row_two[0]:
 
 with row_two[1]:
     with st.container(key="card_video"):
-        st.markdown('<div class="card-icon">🎥</div>', unsafe_allow_html=True)
+        st.markdown('<div class="card-icon"><span class="emoji">🎥</span></div>', unsafe_allow_html=True)
         st.subheader("Video Detector")
         st.write("Analyze AI-generated video risks and deepfake inconsistencies.")
         video_file = st.file_uploader("Upload video", type=["mp4", "mov", "avi", "mkv", "webm"], key="video_file")
