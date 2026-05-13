@@ -206,12 +206,22 @@ def analyze_video(path):
     working_ai_frames = sum(1 for status in ai_statuses if status == "ok")
 
     if working_ai_frames == 0:
+        level = "AI Model Not Configured"
+        score = 0
+
+        if filename_hits:
+            level = "Suspicious"
+            score = max(52, filename_score)
+
         return {
-            "risk_score": min(100, suspicious_points),
-            "risk_level": "Unable to Run AI Model",
+            "risk_score": score,
+            "risk_level": level,
             "frames_analyzed": analyzed_frames,
             "reasons": reasons[:12],
-            "advice": "The AI video model could not run. Check HF_TOKEN and backend network access, then retry.",
+            "advice": (
+                "The AI video model could not run because HF_TOKEN is missing or invalid. "
+                "Add HF_TOKEN in Streamlit Secrets and reboot the app."
+            ),
         }
 
     avg_fake_score = int(sum(fake_scores) / len(fake_scores)) if fake_scores else 0

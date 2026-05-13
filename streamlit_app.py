@@ -9,6 +9,16 @@ import streamlit as st
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 BACKEND_DIR = os.path.join(ROOT_DIR, "backend")
 
+for secret_name in [
+    "HF_TOKEN",
+    "AI_VIDEO_FRAME_MODEL",
+    "AI_MODEL_TIMEOUT_SECONDS",
+    "EASYOCR_LANGUAGES",
+    "EASYOCR_GPU",
+]:
+    if secret_name in st.secrets and not os.getenv(secret_name):
+        os.environ[secret_name] = str(st.secrets[secret_name])
+
 if BACKEND_DIR not in sys.path:
     sys.path.insert(0, BACKEND_DIR)
 
