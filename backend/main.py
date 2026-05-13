@@ -1,5 +1,6 @@
 import os
 import uuid
+import streamlit as st
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,6 +8,9 @@ from text_detector import detect_text_scam
 from URL_Detector import detect_url_scam
 from video_detector import analyze_video
 from Image_Detector import analyze_image, get_ocr_status
+
+st.title("TruthShield AI")
+st.success("Streamlit is working!")
 
 MAX_IMAGE_UPLOAD_MB = int(os.getenv("MAX_IMAGE_UPLOAD_MB", "40"))
 MAX_VIDEO_UPLOAD_MB = int(os.getenv("MAX_VIDEO_UPLOAD_MB", "150"))
